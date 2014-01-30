@@ -41,10 +41,11 @@ inline void irLightsOff() {PORTC &= ~_BV(0);}
 const int indicatorLedPin = PIN_D6; //led on teensy board
 inline void indicatorOn() {PORTD |= _BV(6);}
 inline void indicatorOff() {PORTD &= ~_BV(6);}
+inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
 
+const int stimulusLedControlPin = PIN_F0;
 
-const int stimulusLedControlPin = PF0;
-
+const int experimentAboutToStartIndicatorPin = PIN_E0;
 
 
 const boolean debug = false;
@@ -67,7 +68,8 @@ int nBitsPerFrame = 75; //number of bits output per frame
 int frameBitCount = 0;
 int bitCount = 0;
 
-volatile boolean experimentReady = false;
+const int numFramesToPadExperimentStart = 10;
+volatile int experimentStartCountdown = -1;
 volatile boolean experimentRunning = false;
 
 File sdfile;
@@ -92,7 +94,8 @@ void setup() {
   pinMode(indicatorLedPin, OUTPUT); 
   digitalWrite(indicatorLedPin, HIGH);
     
-  
+  pinMode(experimentAboutToStartIndicatorPin, OUTPUT);
+  digitalWrite(experimentAboutToStartIndicatorPin, LOW);
   
   //setup serial
   Serial.begin(9600);
@@ -140,7 +143,7 @@ ISR ( TIMER3_COMPA_vect ) {
 
 void cameraFlash() {
   
-  if (cameraFlashValue()) { //camera flashes high at start of cycle
+  if (!cameraFlashValue()) { //camera flashes low at start of cycle
     irLightsOn();
     
     unsigned char sreg = SREG;
@@ -159,7 +162,12 @@ void cameraFlash() {
 }
 
 void startNewFrame() {
-  experimentRunning = experimentReady; //this way the experiment always starts on a frame
+  digitalWrite(experimentAboutToStartIndicatorPin, LOW);
+  if (experimentStartCountdown > 0) {
+    experimentRunning = (--experimentStartCountdown == 0);
+    digitalWrite(experimentAboutToStartIndicatorPin, !experimentRunning);
+  }
+  //experimentRunning = experimentReady; //this way the experiment always starts on a frame
   frameBitCount = 0;
   updateTimer3();
   nextBit();
@@ -275,6 +283,11 @@ boolean executeSerialCommand(char *command) {
         Serial.print("OK: File "); Serial.print(filename);  Serial.println (" open for writing"); 
       }
       break;
+    case 'C':
+      if (!closeFile()) {
+        Serial.println("file closed");
+      }
+      break;
     case 'S':
       err = writeBytesFromSerialToFile(command+1);
       if (verbose && !err) {
@@ -297,11 +310,21 @@ boolean executeSerialCommand(char *command) {
       break;
     case 'T':
       err = setStimulus(command+1);
-      if (verbose && !err) Serial.println("OK: stimulus set");
+      if (verbose && !err) {
+        Serial.print("OK: stimulus");
+        if (indicatorIsOn()) {
+          Serial.println(" on");
+        } else {
+          Serial.println(" off");
+        }
+      }
       break;
     case 'N':
-      err = setNumBitsPerFrameFromString(command+1);
-      if (verbose && !err) Serial.println("OK: stimulus set");
+      err = setNumBitsPerFrameFromString(command+1); 
+      if (verbose && !err) {
+        Serial.print("OK: "); Serial.print (nBitsPerFrame); Serial.println(" bits per frame.");
+      }
+      
       break;
     case 'Q':
       verbose = false;
@@ -320,7 +343,7 @@ boolean executeSerialCommand(char *command) {
       Serial.println("unrecognized command");
       err = true;
       break;
-  }
+      }
   return err;
 }
 boolean setNumBitsPerFrameFromString (const char *str) {
@@ -351,6 +374,13 @@ boolean openFileForReading(const char *fname) {
   return (sdfile.peek() < 0);
   
 }
+boolean closeFile() {
+  if (sdfile) {
+    sdfile.close();
+  }
+  return false;
+}
+
 boolean openFileForWriting(const char *fname) {
   while (isspace(fname[0])) {
     ++fname;
@@ -442,7 +472,7 @@ boolean startExperiment() {
  if (!readyToStartExperiment()) {
   return true;
  }
- experimentReady = true;
+ experimentStartCountdown = numFramesToPadExperimentStart;
  enableBitInterrupt();
  return false;
 }
@@ -481,7 +511,8 @@ void reportReady() {
 
 void endExperiment() {
   disableBitInterrupt();
-  experimentReady = false;
+  experimentStartCountdown = -1;
+  experimentRunning = false;
 }
  
  
