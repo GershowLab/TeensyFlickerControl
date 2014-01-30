@@ -562,6 +562,7 @@ void endExperiment() {
   experimentRunning = false;
   experimentElapsedFrames = -999;
   sdfile.close();
+  digitalWrite(stimulusLedControlPin, LOW);
 }
  
  
