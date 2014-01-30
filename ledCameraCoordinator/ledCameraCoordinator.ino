@@ -101,7 +101,7 @@ void setup() {
   digitalWrite(indicatorLedPin, HIGH);
     
   pinMode(experimentAboutToStartIndicatorPin, OUTPUT);
-  digitalWrite(experimentAboutToStartIndicatorPin, LOW);
+  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
   
   //setup serial
   Serial.begin(9600);
@@ -127,19 +127,20 @@ void setup() {
   
 
   setupTimer1();
-  
+  disableBitInterrupt();
   attachInterrupt(cameraFlashWindowPin, cameraFlash, CHANGE);
   
   digitalWrite(indicatorLedPin, LOW);
   
   wdt_enable(WDTO_8S); //reset every 8 seconds unless watchdog timer is reset
 
-  for (int j = 0; j < 4; ++j) {
+  for (int j = 0; j < 5; ++j) {
     wdt_reset();
     digitalWrite(indicatorLedPin, j%2);
+   // digitalWrite(experimentAboutToStartIndicatorPin, j%2);
     delay(500);
   }
-  
+  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
   
 }
 
@@ -168,7 +169,7 @@ void cameraFlash() {
 }
 
 void startNewFrame() {
-  digitalWrite(experimentAboutToStartIndicatorPin, LOW);
+  //digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
   if (experimentRunning) {
     ++experimentElapsedFrames;
   }
@@ -178,7 +179,7 @@ void startNewFrame() {
       experimentStartTime = millis();
       totalBitCount = 0;
     }
-    digitalWrite(experimentAboutToStartIndicatorPin, !experimentRunning);
+    digitalWrite(experimentAboutToStartIndicatorPin, experimentRunning);
   }
   //experimentRunning = experimentReady; //this way the experiment always starts on a frame
   frameBitCount = 0;
@@ -199,8 +200,10 @@ void nextBit() {
     digitalWrite (stimulusLedControlPin, 0);
     return;
   }
+  ++bitCount;
   ++totalBitCount;
   digitalWrite (stimulusLedControlPin, currentByte & _BV(bitCount)); //digital write is "slow" ~55 microseconds 
+  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
 }
 
 void pollForNewByte () {
@@ -360,6 +363,9 @@ boolean executeSerialCommand(char *command) {
       break;
     case 'I':
       getInfo();
+      break;
+      case 'G':
+      PINE = 1;
       break;
     default:
       Serial.println("unrecognized command");
