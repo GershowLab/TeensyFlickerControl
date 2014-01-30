@@ -44,6 +44,8 @@ inline void indicatorOff() {PORTD &= ~_BV(6);}
 inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
 
 const int stimulusLedControlPin = PIN_F0;
+inline boolean stimulusLedControlPinIsOn() {return (PORTF & _BV(0));}
+
 
 const int experimentAboutToStartIndicatorPin = PIN_E0;
 
@@ -67,6 +69,7 @@ int tnt3prescaleByte = 1;
 int nBitsPerFrame = 75; //number of bits output per frame
 int frameBitCount = 0;
 int bitCount = 0;
+long totalBitCount = 0;
 
 const int numFramesToPadExperimentStart = 10;
 volatile int experimentStartCountdown = -1;
@@ -80,6 +83,9 @@ const int SERIALBUFFERSIZE = 64;
 byte serialBuffer[SERIALBUFFERSIZE];
 
 const int SERIAL_CHARS_TO_BUFFER = 255;
+
+long int experimentStartTime = 0;
+long int experimentElapsedFrames = -999;
 
 void setup() {
   //first, turn off the clock prescaler, to get 16MHz operation
@@ -163,8 +169,15 @@ void cameraFlash() {
 
 void startNewFrame() {
   digitalWrite(experimentAboutToStartIndicatorPin, LOW);
-  if (experimentStartCountdown > 0) {
-    experimentRunning = (--experimentStartCountdown == 0);
+  if (experimentRunning) {
+    ++experimentElapsedFrames;
+  }
+  if ((experimentStartCountdown--) > 0) {
+    experimentElapsedFrames = -experimentStartCountdown;
+    if (experimentRunning = (experimentStartCountdown == 0)) {
+      experimentStartTime = millis();
+      totalBitCount = 0;
+    }
     digitalWrite(experimentAboutToStartIndicatorPin, !experimentRunning);
   }
   //experimentRunning = experimentReady; //this way the experiment always starts on a frame
@@ -186,6 +199,7 @@ void nextBit() {
     digitalWrite (stimulusLedControlPin, 0);
     return;
   }
+  ++totalBitCount;
   digitalWrite (stimulusLedControlPin, currentByte & _BV(bitCount)); //digital write is "slow" ~55 microseconds 
 }
 
@@ -257,6 +271,11 @@ void printHelp() {
  * B - (Begin) experiment
  * E - (End) experiment
  * N xx - (Number) of bits per frame; xx can be dec, hex, or oct, as ready by strtoi. xx must be > 0; unreasonably large values of xx will result in crashes
+ * I - Info - returns 4 long integers: A B C D \n
+ *   A frame since experiment start if running; -999 if not running
+ *   B time since experiment started in ms
+ *   C position in file (note that experiment reads ahead 1 byte)
+ *   D number of bits output to this point
  * Q - (Quiet) - only respond to errors [default loud]
  * L - (Loud) - acknowledge all commands [default]
  * T x - (sTimulus) set stimulus LED off (x = 0) or on (x ~= 0);
@@ -312,7 +331,7 @@ boolean executeSerialCommand(char *command) {
       err = setStimulus(command+1);
       if (verbose && !err) {
         Serial.print("OK: stimulus");
-        if (indicatorIsOn()) {
+        if (stimulusLedControlPinIsOn()) {
           Serial.println(" on");
         } else {
           Serial.println(" off");
@@ -339,6 +358,9 @@ boolean executeSerialCommand(char *command) {
     case 'Y':
       reportReady();
       break;
+    case 'I':
+      getInfo();
+      break;
     default:
       Serial.println("unrecognized command");
       err = true;
@@ -346,6 +368,31 @@ boolean executeSerialCommand(char *command) {
       }
   return err;
 }
+/* I - Info - returns 4 long integers: A B C D \n
+ *   A frame since experiment start if running; -999 if not running
+ *   B time since experiment started in ms
+ *   C position in file (note that experiment reads ahead 1 byte)
+ *   D number of bits output to this point
+ */
+void getInfo() {
+  Serial.print(experimentElapsedFrames); Serial.print('\t');
+  if (experimentRunning) {
+    Serial.print(millis() - experimentStartTime);
+  } else {
+    Serial.print (-1);
+  }
+  Serial.print('\t');
+  if (sdfile) {
+    Serial.print(sdfile.position());
+  } else {
+    Serial.print (-1);
+  } 
+  Serial.print('\t');
+  Serial.println(totalBitCount);
+  
+  
+}
+
 boolean setNumBitsPerFrameFromString (const char *str) {
   int nb = atoi(str);
   if (nb <= 0 || nb > 150) {
@@ -513,6 +560,8 @@ void endExperiment() {
   disableBitInterrupt();
   experimentStartCountdown = -1;
   experimentRunning = false;
+  experimentElapsedFrames = -999;
+  sdfile.close();
 }
  
  
