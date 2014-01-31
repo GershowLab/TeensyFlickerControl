@@ -292,6 +292,7 @@ boolean executeSerialCommand(char *command) {
   while (isspace(command[0])) {
     ++command;
   }
+  long nbytes;
   switch(toupper(command[0])) {
     case 'R': 
       err = openFileForReading(command+1);
@@ -317,9 +318,9 @@ boolean executeSerialCommand(char *command) {
       }
       break;
     case 'F':
-      err = readBytesFromFileToSerial(command+1);
-      if (verbose && !err) {
-        Serial.print("OK: Tranfer from "); Serial.print(filename); Serial.println(" complete"); 
+      err = readBytesFromFileToSerial(command+1, nbytes);
+      if (verbose && !err && nbytes > 0) {
+        Serial.print("OK: Tranfer of "); Serial.print(nbytes); Serial.print(" bytes from "); Serial.print(filename); Serial.println(" complete"); 
       }
       break;
     case 'B':
@@ -344,7 +345,7 @@ boolean executeSerialCommand(char *command) {
     case 'N':
       err = setNumBitsPerFrameFromString(command+1); 
       if (verbose && !err) {
-        Serial.print("OK: "); Serial.print (nBitsPerFrame); Serial.println(" bits per frame.");
+         Serial.println();Serial.print("OK: "); Serial.print (nBitsPerFrame); Serial.println(" bits per frame.");
       }
       
       break;
@@ -495,28 +496,45 @@ boolean setStimulus(const char *command) { //could update with some kind of chec
   return false;
 }
 
-boolean readBytesFromFileToSerial (const char *command) {
-  unsigned long nbytes = strtoul (command, NULL, 0);
+boolean readBytesFromFileToSerial (const char *command, long &nbytes) {
+  /*unsigned long */
+  nbytes = strtoul (command, NULL, 0);
+  if (!sdfile) {
+    openFileForReading(NULL);
+  }
   
   if (!sdfile) {
-    for ( ; nbytes > 0; --nbytes) {
+    for (long j = 0 ; j < nbytes; ++j) {
       wdt_reset();
       Serial.write((uint8_t) 0);
+      if (!(j%64)) {
+        Serial.flush();
+      }
     }
+      Serial.flush(); Serial.println();
       Serial.println("no file open");
       return true;
   }
   
   int n2w;
   boolean err = false;
-  for ( ;nbytes > 0; --nbytes) {
+  unsigned long target = nbytes;
+  if (nbytes < 0) {
+    target = sdfile.size();
+  }
+  
+  for (unsigned long j = 0;j < target; ++j) {
     wdt_reset();
     int v =  sdfile.read(); 
     err |= (v < 0);  
-    Serial.write(min(0, v));
-  }
+    Serial.write((uint8_t) (max(0, v)));
+    if (!(j%64)) {
+        Serial.flush();
+      }
+    }
+  Serial.flush();
   if (err) {
-    Serial.println ("insufficient bytes to read/read error");
+     Serial.println(); Serial.println ("insufficient bytes to read/read error");
   }
   return err;
 }
