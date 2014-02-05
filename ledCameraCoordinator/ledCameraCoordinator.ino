@@ -45,10 +45,14 @@ inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
 
 const int stimulusLedControlPin = PIN_F0;
 inline boolean stimulusLedControlPinIsOn() {return (PORTF & _BV(0));}
+inline void stimulusOn() {PORTF |= _BV(0);}
+inline void stimulusOff() {PORTF &= ~_BV(0);}
+inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
 
 
 const int experimentAboutToStartIndicatorPin = PIN_E0;
-
+inline void expIndOn() {PORTE &= ~_BV(0);}
+inline void expIndOff() {PORTE |= _BV(0);}
 
 const boolean debug = false;
 
@@ -140,7 +144,7 @@ void setup() {
    // digitalWrite(experimentAboutToStartIndicatorPin, j%2);
     delay(500);
   }
-  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
+  expIndOff();
   
 }
 
@@ -169,11 +173,15 @@ void cameraFlash() {
 }
 
 void startNewFrame() {
+  if (!experimentRunning) {
+    expIndOff();
+  }
   //digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
   if (experimentRunning) {
     ++experimentElapsedFrames;
   }
-  if ((experimentStartCountdown--) > 0) {
+  if ((experimentStartCountdown) > 0) {
+    experimentStartCountdown--;
     experimentElapsedFrames = -experimentStartCountdown;
     if (experimentRunning = (experimentStartCountdown == 0)) {
       experimentStartTime = millis();
@@ -197,13 +205,15 @@ void nextBit() {
     currentByte = nextByte;
   }
   if (currentByte < 0) { //error reading from file
-    digitalWrite (stimulusLedControlPin, 0);
+    //stimulusOff();
+    //expIndOn();
     return;
   }
+ 
+  setStimulus(currentByte & _BV(bitCount));
   ++bitCount;
   ++totalBitCount;
-  digitalWrite (stimulusLedControlPin, currentByte & _BV(bitCount)); //digital write is "slow" ~55 microseconds 
-  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
+  expIndOff();
 }
 
 void pollForNewByte () {
@@ -586,7 +596,8 @@ void endExperiment() {
   experimentRunning = false;
   experimentElapsedFrames = -999;
   sdfile.close();
-  digitalWrite(stimulusLedControlPin, LOW);
+  stimulusOff();
+  expIndOff();
 }
  
  
