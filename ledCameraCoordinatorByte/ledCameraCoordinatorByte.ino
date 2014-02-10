@@ -63,7 +63,7 @@ volatile boolean newFrame = false;
 
 
 const int tnt1prescale = 64;
-int tnt3prescale = 64;
+int tnt3prescale = 8;
 int tnt3prescaleByte = 1;
 unsigned int timer3countsPerByte;
 
@@ -75,6 +75,7 @@ volatile int currentByteIndex = 0;
 volatile int readIndex = 0;
 uint8_t byteBuffer[bytesToPad];
 unsigned int pwmval;
+byte pwmbyte;
 
 const int numFramesToPadExperimentStart = 10;
 volatile int experimentStartCountdown = -1;
@@ -93,6 +94,8 @@ long int experimentStartTime = 0;
 long int experimentElapsedFrames = -999;
 
 long int frameCount = 0;
+
+boolean timer3setup = false;
 
 void setup() {
   //first, turn off the clock prescaler, to get 16MHz operation
@@ -134,7 +137,7 @@ void setup() {
   
 
   setupTimer1();
-  disableTimer3Interrupt();
+  disableTimer3Interrupts();
   setupTimer3(tnt3prescale);
   attachInterrupt(cameraFlashWindowPin, cameraFlash, CHANGE);
   
@@ -150,14 +153,24 @@ void setup() {
   }
   expIndOff();
   
- // setNumBytesPerFrame(5);
+ setNumBytesPerFrame(5);
  // updateTimer3();
- setStimulusValue(128);
+ setPwmVal(254);
+ enableTimer3Interrupts();
+ Serial.print("pwmval = "); Serial.println(pwmval);
+ Serial.print("ocr3a = "); Serial.println(OCR3A);
+ Serial.print("ocr3b = "); Serial.println(OCR3B);
+ 
 
 }
 
 ISR ( TIMER3_COMPA_vect ) {
   nextByte();
+}
+
+ISR ( TIMER3_COMPB_vect ) {
+  stimulusOff();
+//  setStimulus(OCR3A <= TCNT3);
 }
 
 void cameraFlash() {
@@ -181,14 +194,9 @@ void cameraFlash() {
 }
 
 void startNewFrame() {
-  if ((++frameCount)%3 == 0) {
-    updateTimer3();
-  }
-
-  if (!experimentRunning) {
-    expIndOff();
-  }
-  //digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
+  
+ 
+  
   if (experimentRunning) {
     ++experimentElapsedFrames;
   }
@@ -201,31 +209,44 @@ void startNewFrame() {
     }
     digitalWrite(experimentAboutToStartIndicatorPin, experimentRunning);
   }
-  //experimentRunning = experimentReady; //this way the experiment always starts on a frame
-  frameByteCount = 0;
- // resetTimer3();
- //TCNT3 = OCR3A-2;
-//  nextByte();
   
-  //resetTimer3();
-  if (OCR3B) {
- //   stimulusOn();
-  }
+  frameByteCount = 0;
+  
+  interrupts();
+  updateTimer3();
+  nextByte();
 }
 
 void nextByte() {
+  setStimulus(pwmval > 0);
+  OCR3B = pwmval;
+  if (pwmbyte == 255) {
+    disableTimer3BInterrupt();
+  } else {
+    enableTimer3BInterrupt();
+  }
+//  if (pwmval > 0) {
+  //  stimulusOn();
+  //}
   if (!experimentRunning || (++frameByteCount > nBytesPerFrame)) {
     return;
   } //keep us from putting too many bits into a frame if the camera is a little slow or the avr is a little fast
   
-  OCR3B = pwmval;  
+  //OCR3B = pwmval;  
 
   ++totalByteCount;
   updatePwmVal();
   expIndOff();
 }
+
+inline void setPwmVal(byte pwmb) {
+  pwmbyte = pwmb;
+  pwmval = (unsigned int) (pwmb/255.0 * timer3countsPerByte);
+}
 void updatePwmVal() {
-  pwmval = (unsigned int) (1.0*byteBuffer[currentByteIndex]/255*timer3countsPerByte);
+  setPwmVal (byteBuffer[currentByteIndex]);
+//  pwmbyte = 
+ // pwmval = (unsigned int) (((float) byteBuffer[currentByteIndex])/255.0*timer3countsPerByte);
   currentByteIndex = (currentByteIndex+1)%bytesToPad;
 }
 
@@ -262,7 +283,9 @@ void setNumBytesPerFrame (int nbytes) {
   nBytesPerFrame = nbytes;
   
 //  float targetPreScale = countsSinceLastFrame/65000.0*tnt1prescale / nbytes;  
-  float targetPreScale = 1.0*tnt1prescale / nbytes;  
+  //float targetPreScale = 1.0*tnt1prescale / nbytes;  
+  
+  float targetPreScale = nbytes > 2 ? 8 : 64;
   
   setupTimer3(targetPreScale);
 }
@@ -272,6 +295,12 @@ void loop() {
   wdt_reset(); //pet the dog
   serialPoll();
   pollForNewByte();
+  /*
+  if (timer3setup == false && millis() > 5000 ) {
+    updateTimer3();
+    timer3setup = true;
+  }
+  */
 }
 
 
@@ -539,13 +568,13 @@ boolean writeBytesFromSerialToFile (const char *command) {
 
 boolean setStimulus(const char *command) { //could update with some kind of check to make sure there is a number
   //digitalWrite(stimulusLedControlPin, atoi(command));
-  setStimulusValue(atoi(command));
+  setPwmVal(atoi(command));
   
   return false;
 }
-void setStimulusValue(byte val) {
-  OCR3B = (unsigned int) (1.0*val/255*timer3countsPerByte);
-}
+//void setStimulusValue(byte val) {
+//  pwmval = min((unsigned int) (1.0*val/255*timer3countsPerByte), OCR3A);
+//}
 
 boolean readBytesFromFileToSerial (const char *command, long &nbytes) {
   /*unsigned long */
@@ -595,7 +624,7 @@ boolean startExperiment() {
   return true;
  }
  experimentStartCountdown = numFramesToPadExperimentStart;
- enableTimer3Interrupt();
+ //enableTimer3Interrupt();
  return false;
 }
 
@@ -632,7 +661,7 @@ void reportReady() {
 }
 
 void endExperiment() {
-  disableTimer3Interrupt();
+  //disableTimer3Interrupt();
   experimentStartCountdown = -1;
   experimentRunning = false;
   experimentElapsedFrames = -999;
@@ -667,7 +696,7 @@ void setupTimer3(float targetPreScale) {
   byte prescalerBytes[] = {1,2,3,4,5};
   int ps;
   for (ps = 0; ps < 5; ps++) {
-    if (prescalerValues[ps] >= targetPreScale) {
+    if (prescalerValues[ps] >= targetPreScale - 0.001) {
        break;
     }
   } 
@@ -675,10 +704,11 @@ void setupTimer3(float targetPreScale) {
   tnt3prescaleByte = prescalerBytes[ps];
   unsigned char sreg = SREG;
   noInterrupts();
-//  TCCR3A = 0;
+  TCCR3A = 0; //for CTC mode
  //setup for fast PWM mode
-  TCCR3A = (_BV(COM3B1) | _BV(WGM31) | _BV(WGM30));
-  TCCR3B = _BV(WGM33) | _BV(WGM32); 
+  //TCCR3A = (_BV(COM3B1) | _BV(WGM31) | _BV(WGM30)); old - clear on compare, set on top
+  //TCCR3A = (_BV(COM3B1) | _BV(COM3B0) | _BV(WGM31) | _BV(WGM30)); //new set on compare, clear on top
+  TCCR3B = _BV(WGM32);  //_BV(WGM33) | PWM
   TCCR3C = 0;
   SREG = sreg;
 }
@@ -690,20 +720,31 @@ void updateTimer3() {
   timer3countsPerByte = (unsigned int) (1.0*countsSinceLastFrame*(tnt1prescale/tnt3prescale)/nBytesPerFrame + 0.5); 
   unsigned char sreg = SREG;
   noInterrupts();
-  TCCR3B = _BV(WGM33) | _BV(WGM32);  //set to FAST PWM mode; stop counter
-  
+  //TCCR3B = _BV(WGM33) | _BV(WGM32);  //set to FAST PWM mode; stop counter
+  TCCR3B = _BV(WGM32); //for CTC mode
   OCR3A = timer3countsPerByte;  
-  TCNT3 = OCR3A - 2; //start it early so it triggers a reset correctly
+  //TCNT3 = OCR3A - 2; //start it early so it triggers a reset correctly
+  TCNT3 = 0;
   TCCR3B |= tnt3prescaleByte; //start clock  
   SREG = sreg; 
+ // TCCR3C |= _BV(FOC3A); //force output compare
+ // stimulusOn();
+  
 }
 
-void enableTimer3Interrupt() {
-  TIMSK3 |= _BV(OCIE3A ); // Enable CTC interrupt
+inline void enableTimer3BInterrupt() {
+  TIMSK3 |= _BV(OCIE3B);
+}
+inline void disableTimer3BInterrupt() {
+  TIMSK3 &= ~_BV(OCIE3B); // disable CTC interrupt
+}
+
+inline void enableTimer3Interrupts() {
+  TIMSK3 |= (_BV(OCIE3A ) | _BV(OCIE3B) ); // Enable CTC interrupt
   interrupts(); // make sure global interrupts are on
 }
-void disableTimer3Interrupt() {
-  TIMSK3 &= ~_BV(OCIE3A ); // disable CTC interrupt
+inline void disableTimer3Interrupts() {
+  TIMSK3 &= (~_BV(OCIE3A ) & ~_BV(OCIE3B)); // disable CTC interrupt
 }
 
 

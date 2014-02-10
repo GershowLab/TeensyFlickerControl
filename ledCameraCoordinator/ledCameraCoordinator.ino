@@ -42,13 +42,19 @@ const int indicatorLedPin = PIN_D6; //led on teensy board
 inline void indicatorOn() {PORTD |= _BV(6);}
 inline void indicatorOff() {PORTD &= ~_BV(6);}
 inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
-
+/*
 const int stimulusLedControlPin = PIN_F0;
 inline boolean stimulusLedControlPinIsOn() {return (PORTF & _BV(0));}
 inline void stimulusOn() {PORTF |= _BV(0);}
 inline void stimulusOff() {PORTF &= ~_BV(0);}
 inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
+*/
 
+const int stimulusLedControlPin = PIN_C5; //OC3B
+inline boolean stimulusLedControlPinIsOn() {return (PORTC & _BV(5));}
+inline void stimulusOn() {PORTC |= _BV(5);}
+inline void stimulusOff() {PORTC &= ~_BV(5);}
+inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
 
 const int experimentAboutToStartIndicatorPin = PIN_E0;
 inline void expIndOn() {PORTE &= ~_BV(0);}
