@@ -63,7 +63,7 @@ volatile boolean newFrame = false;
 
 
 const int tnt1prescale = 64;
-int tnt3prescale = 1;
+int tnt3prescale = 64;
 int tnt3prescaleByte = 1;
 unsigned int timer3countsPerByte;
 
@@ -91,6 +91,8 @@ const int SERIAL_CHARS_TO_BUFFER = 255;
 
 long int experimentStartTime = 0;
 long int experimentElapsedFrames = -999;
+
+long int frameCount = 0;
 
 void setup() {
   //first, turn off the clock prescaler, to get 16MHz operation
@@ -133,6 +135,7 @@ void setup() {
 
   setupTimer1();
   disableTimer3Interrupt();
+  setupTimer3(tnt3prescale);
   attachInterrupt(cameraFlashWindowPin, cameraFlash, CHANGE);
   
   digitalWrite(indicatorLedPin, LOW);
@@ -147,6 +150,10 @@ void setup() {
   }
   expIndOff();
   
+ // setNumBytesPerFrame(5);
+ // updateTimer3();
+ setStimulusValue(128);
+
 }
 
 ISR ( TIMER3_COMPA_vect ) {
@@ -174,6 +181,10 @@ void cameraFlash() {
 }
 
 void startNewFrame() {
+  if ((++frameCount)%3 == 0) {
+    updateTimer3();
+  }
+
   if (!experimentRunning) {
     expIndOff();
   }
@@ -192,8 +203,14 @@ void startNewFrame() {
   }
   //experimentRunning = experimentReady; //this way the experiment always starts on a frame
   frameByteCount = 0;
-  updateTimer3();
-  nextByte();
+ // resetTimer3();
+ //TCNT3 = OCR3A-2;
+//  nextByte();
+  
+  //resetTimer3();
+  if (OCR3B) {
+ //   stimulusOn();
+  }
 }
 
 void nextByte() {
@@ -202,6 +219,7 @@ void nextByte() {
   } //keep us from putting too many bits into a frame if the camera is a little slow or the avr is a little fast
   
   OCR3B = pwmval;  
+
   ++totalByteCount;
   updatePwmVal();
   expIndOff();
@@ -520,8 +538,13 @@ boolean writeBytesFromSerialToFile (const char *command) {
 }
 
 boolean setStimulus(const char *command) { //could update with some kind of check to make sure there is a number
-  digitalWrite(stimulusLedControlPin, atoi(command));
+  //digitalWrite(stimulusLedControlPin, atoi(command));
+  setStimulusValue(atoi(command));
+  
   return false;
+}
+void setStimulusValue(byte val) {
+  OCR3B = (unsigned int) (1.0*val/255*timer3countsPerByte);
 }
 
 boolean readBytesFromFileToSerial (const char *command, long &nbytes) {
@@ -659,14 +682,18 @@ void setupTimer3(float targetPreScale) {
   TCCR3C = 0;
   SREG = sreg;
 }
+void resetTimer3() {
+  TCNT3 = 0;
+}
 
 void updateTimer3() {
   timer3countsPerByte = (unsigned int) (1.0*countsSinceLastFrame*(tnt1prescale/tnt3prescale)/nBytesPerFrame + 0.5); 
   unsigned char sreg = SREG;
   noInterrupts();
   TCCR3B = _BV(WGM33) | _BV(WGM32);  //set to FAST PWM mode; stop counter
-  TCNT3 = 0;
+  
   OCR3A = timer3countsPerByte;  
+  TCNT3 = OCR3A - 2; //start it early so it triggers a reset correctly
   TCCR3B |= tnt3prescaleByte; //start clock  
   SREG = sreg; 
 }
