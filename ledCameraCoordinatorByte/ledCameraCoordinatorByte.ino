@@ -155,7 +155,7 @@ void setup() {
   
  setNumBytesPerFrame(5);
  // updateTimer3();
- setPwmVal(254);
+ setPwmVal(0);
  enableTimer3Interrupts();
  Serial.print("pwmval = "); Serial.println(pwmval);
  Serial.print("ocr3a = "); Serial.println(OCR3A);
@@ -666,7 +666,8 @@ void endExperiment() {
   experimentRunning = false;
   experimentElapsedFrames = -999;
   sdfile.close();
-  stimulusOff();
+  //stimulusOff();
+  setPwmVal(0);
   expIndOff();
 }
  
