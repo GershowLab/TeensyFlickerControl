@@ -27,7 +27,7 @@
  */
  
  //comment this line out for red stimulation
- #define BLUE 1 
+#define BLUE 1 
 
 const int ssPin = PIN_B0;
 
@@ -46,11 +46,20 @@ inline void indicatorOn() {PORTD |= _BV(6);}
 inline void indicatorOff() {PORTD &= ~_BV(6);}
 inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
 
-const int stimulusLedControlPin = PIN_C5; //OC3B
-inline boolean stimulusLedControlPinIsOn() {return (PORTC & _BV(5));}
-inline void stimulusOn() {PORTC |= _BV(5);}
-inline void stimulusOff() {PORTC &= ~_BV(5);}
-inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
+#ifndef BLUE
+  #define STIMPIN 5
+  const int stimulusLedControlPin = PIN_C5; //OC3B
+#else
+  #define STIMPIN 6
+  const int stimulusLedControlPin = PIN_C6; //OC3A
+#endif
+  
+  //const int stimulusLedControlPin = PIN_C5; //OC3B
+  inline boolean stimulusLedControlPinIsOn() {return (PORTC & _BV(STIMPIN));}
+  inline void stimulusOn() {PORTC |= _BV(STIMPIN);}
+  inline void stimulusOff() {PORTC &= ~_BV(STIMPIN);}
+  inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
+
 
 const int syncPin = PIN_B4;
 
