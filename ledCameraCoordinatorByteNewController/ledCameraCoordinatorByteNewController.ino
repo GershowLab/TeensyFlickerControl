@@ -26,12 +26,15 @@
  * H - help - right, good luck with that guy
  */
  
+ //comment this line out for red stimulation
+ #define BLUE 1 
 
 const int ssPin = PIN_B0;
 
 const int cameraFlashWindowPin = PIN_D0;
 inline int cameraFlashValue() {
  return (PIND & _BV(0));
+ // return !(PIND & _BV(0));
 }
 
 const int infraredLedControlPin = PIN_C0;
@@ -49,10 +52,11 @@ inline void stimulusOn() {PORTC |= _BV(5);}
 inline void stimulusOff() {PORTC &= ~_BV(5);}
 inline void setStimulus(boolean on) {if (on) stimulusOn(); else stimulusOff();}
 
+const int syncPin = PIN_B4;
 
-const int experimentAboutToStartIndicatorPin = PIN_E0;
-inline void expIndOn() {PORTE &= ~_BV(0);}
-inline void expIndOff() {PORTE |= _BV(0);}
+const int notShdnLedPin = PIN_E0;
+inline void ledsDisable() {PORTE &= ~_BV(0);}
+inline void ledsEnable() {PORTE |= _BV(0);}
 
 const boolean debug = false;
 
@@ -110,8 +114,10 @@ void setup() {
   pinMode(indicatorLedPin, OUTPUT); 
   digitalWrite(indicatorLedPin, HIGH);
     
-  pinMode(experimentAboutToStartIndicatorPin, OUTPUT);
-  digitalWrite(experimentAboutToStartIndicatorPin, HIGH);
+  pinMode(notShdnLedPin, OUTPUT);
+  //digitalWrite(notShdnLedPin, HIGH);
+  //ledsDisable();
+  ledsEnable();
   
   //setup serial
   Serial.begin(9600);
@@ -130,6 +136,8 @@ void setup() {
   pinMode(stimulusLedControlPin, OUTPUT);
   digitalWrite(stimulusLedControlPin, LOW);
   
+  pinMode(syncPin, OUTPUT);
+  digitalWrite(syncPin, LOW); //FIX LATER -- for now 1.6 default clock
   
   //start SD library
   SD.begin(ssPin);
@@ -151,7 +159,7 @@ void setup() {
    // digitalWrite(experimentAboutToStartIndicatorPin, j%2);
     delay(500);
   }
-  expIndOff();
+//  expIndOff();
   
  setNumBytesPerFrame(5);
  // updateTimer3();
@@ -207,7 +215,7 @@ void startNewFrame() {
       experimentStartTime = millis();
       totalByteCount = 0;
     }
-    digitalWrite(experimentAboutToStartIndicatorPin, experimentRunning);
+    //digitalWrite(experimentAboutToStartIndicatorPin, experimentRunning);
   }
   
   frameByteCount = 0;
@@ -236,7 +244,7 @@ void nextByte() {
 
   ++totalByteCount;
   updatePwmVal();
-  expIndOff();
+//  expIndOff();
 }
 
 inline void setPwmVal(byte pwmb) {
@@ -683,7 +691,7 @@ void endExperiment() {
   sdfile.close();
   //stimulusOff();
   setPwmVal(0);
-  expIndOff();
+ // expIndOff();
 }
  
  
