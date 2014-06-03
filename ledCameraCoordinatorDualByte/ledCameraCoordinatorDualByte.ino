@@ -16,6 +16,8 @@
  * S 1/2 xxx - (Send) transfer xxx bytes from computer to file (specified by W) : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)
  * F 1/2 xxx - (Fetch) transfer first xxx bytes from file to computer; if xxx is greater than number of bytes in file, remaining bytes will be 0 : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)
  * S,F - xxx must be between 0 and 2^32-1 (maximum value of unsigned long); the conversion is handled by the c function strtoul, so xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)
+ * O 1/2 x - (Output) 1/2 on (x > 0) or off (x == 0)
+ *  note: opening a file for reading/writing automatically attempts to enable it
  * B - (Begin) experiment
  * E - (End) experiment
  * T xxx yyy - (sTimulus) set stimulus LED 1 to xxx and stimulus LED 2 to yyy
@@ -39,6 +41,8 @@
  "S 1/2 xxx - (Send) transfer xxx bytes from computer to file (specified by W) : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
  "F 1/2 xxx - (Fetch) transfer first xxx bytes from file to computer; if xxx is greater than number of bytes in file, remaining bytes will be 0 : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
  "S,F - xxx must be between 0 and 2^32-1 (maximum value of unsigned long); the conversion is handled by the c function strtoul, so xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
+ "O 1/2 x - (Output) 1/2 on (x > 0) or off (x == 0)\n"
+ "  note: opening a file for reading/writing automatically attempts to enable the corresponding output\n"
  "B - (Begin) experiment\n"
  "E - (End) experiment\n"
  "T xxx yyy - (sTimulus) set stimulus LED 1 to xxx and stimulus LED 2 to yyy\n"
@@ -481,6 +485,9 @@ boolean executeSerialCommand(char *command) {
       }
       
       break;
+    case 'O':
+      err = setOutputState(command + 1);
+      break;
     case 'Q':
       verbose = false;
       break;
@@ -504,6 +511,51 @@ boolean executeSerialCommand(char *command) {
       }
   return err;
 }
+
+boolean setOutputState(const char *command) {
+  if (command == NULL) {
+    return true;
+  }
+
+  while (isspace(command[0]) && command[0] != '\0') {
+    ++command;
+  }
+  int fn = atoi(command);
+  while (!isspace(command[0]) && command[0] != '\0') {
+    ++command;
+  }
+  int x = atoi(command);
+  if (fn < 1 || fn > 2 || x < 0) {
+    return true;
+  }
+  boolean state = x > 0;
+  if (fn == 1) {
+    output1enabled = state;
+    if (verbose) {
+      Serial.print ("OK: Output 1 ");
+      if (state) {
+        Serial.println("enabled");
+      } else {
+        Serial.println("disabled");
+      }
+    }
+  } 
+  if (fn == 2) {
+    output2enabled = state;
+    if (verbose) {
+      Serial.print ("OK: Output 2 ");
+      if (state) {
+        Serial.println("enabled");
+      } else {
+        Serial.println("disabled");
+      }
+    }
+  }
+  return false;
+  
+}
+
+
 /* I - Info - returns 5 long integers: A B C D E\n
  *   A frame since experiment start if running; -999 if not running
  *   B time since experiment started in ms
@@ -579,6 +631,11 @@ boolean openFile1ForReading(const char *fname) {
     }
     strncpy(filename1, fname, MAXFILECHARS);
     filename1[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
+  } else {
+    //if output1 has been disabled, don't enable it by opening file
+    if (!output1enabled) {
+      return false;
+    }
   }
   if (sdfile1) {
     sdfile1.close();
@@ -602,6 +659,11 @@ boolean openFile2ForReading(const char *fname) {
     }
     strncpy(filename2, fname, MAXFILECHARS);
     filename2[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
+  } else {
+    //if output2 has been disabled, don't enable it by opening file
+    if (!output2enabled) {
+      return false;
+    }
   }
   if (sdfile2) {
     sdfile2.close();
@@ -673,6 +735,8 @@ boolean openFileForWriting(const char *fname) {
     if (!sdfile1) {
       Serial.print("could not open "); Serial.println(filename);
       err = true;
+    } else {
+      output1enabled = true;
     }
     strncpy(filename1, filename, MAXFILECHARS);
     filename1[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
@@ -686,6 +750,8 @@ boolean openFileForWriting(const char *fname) {
     if (!sdfile2) {
       Serial.print("could not open "); Serial.println(filename);
       err = true;
+    } else {
+      output2enabled = true;
     }
     strncpy(filename2, filename, MAXFILECHARS);
     filename2[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
