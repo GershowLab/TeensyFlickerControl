@@ -2,7 +2,7 @@
 #include <avr/wdt.h>
 #include <ctype.h>
 #include <stdlib.h>
-
+#include <avr/pgmspace.h>
 /* LED-CAMERA COORDINATION SOFTWARE FOR TEENSY++ 2.0 and SD card addon
  * Copyright(C) 2012, 2014 Marc Gershow
  * Requires arduino v 1.05 or higher & teensyduino add-on
@@ -31,6 +31,28 @@
  *   D position in file2 (note that experiment reads ahead)
  *   E number of bytes output to this point
  */
+ 
+ prog_char helpmessage[] PROGMEM  = {"Serial Commands \n all commands on one line, terminate with \\n or \\r\n"
+ "R 1/2 filename - (Read) open file 1/2 for reading (use for experiment)\n"
+ "W filename - (Write) open file for writing\n"
+ "C - (Close) both files; done automatically at End of experiment\n"
+ "S 1/2 xxx - (Send) transfer xxx bytes from computer to file (specified by W) : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
+ "F 1/2 xxx - (Fetch) transfer first xxx bytes from file to computer; if xxx is greater than number of bytes in file, remaining bytes will be 0 : xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
+ "S,F - xxx must be between 0 and 2^32-1 (maximum value of unsigned long); the conversion is handled by the c function strtoul, so xxx can be dec, hex (0x - zero x), or oct (leading 0 - zero)\n"
+ "B - (Begin) experiment\n"
+ "E - (End) experiment\n"
+ "T xxx yyy - (sTimulus) set stimulus LED 1 to xxx and stimulus LED 2 to yyy\n"
+ "N xx - (Number) of bytes per frame; xx can be dec, hex, or oct, as ready by strtoi. xx must be > 0; unreasonably large values of xx will result in crashes\n"
+ "Y - (readY) - returns ready + details if ready to start experiment; returns error + details if not ready to start experiment\n"
+ "Q - (Quiet) - only respond to errors [default loud]\n"
+ "L - (Loud) - acknowledge all commands [default]\n"
+ "H - help - this message\n"
+ "I - Info - returns 5 long integers: A B C D E\\n\n"
+ " A frame since experiment start if running; -999 if not running\n"
+ " B time since experiment started in ms\n"
+ " C position in file1 (note that experiment reads ahead)\n"
+ " D position in file2 (note that experiment reads ahead)\n"
+ " E number of bytes output to this point\n"};
  
 
 const int ssPin = PIN_B0;
@@ -113,7 +135,7 @@ const int MAXFILECHARS = 255;
 char filename1[MAXFILECHARS+1];
 char filename2[MAXFILECHARS+1];
 
-//???
+
 const int SERIALBUFFERSIZE = 64;
 byte serialBuffer[SERIALBUFFERSIZE];
 const int SERIAL_CHARS_TO_BUFFER = 255;
@@ -405,7 +427,7 @@ void serialPoll() {
 }
 
 void printHelp() {
-  Serial.println ("look in the sketch for help!");
+  Serial.println (helpmessage);
 }
 
 
@@ -995,22 +1017,22 @@ inline void enableTimer3BInterrupt() {
   TIMSK3 |= _BV(OCIE3B);
 }
 inline void disableTimer3BInterrupt() {
-  TIMSK3 &= ~_BV(OCIE3B); // disable CTC interrupt
+  TIMSK3 &= ~_BV(OCIE3B); 
 }
 inline void enableTimer3CInterrupt() {
   TIMSK3 |= _BV(OCIE3C);
 }
 inline void disableTimer3CInterrupt() {
-  TIMSK3 &= ~_BV(OCIE3C); // disable CTC interrupt
+  TIMSK3 &= ~_BV(OCIE3C); 
 }
 
 inline void enableTimer3Interrupts() {
-  TIMSK3 |= (_BV(OCIE3A ) | _BV(OCIE3B) | _BV(OCIE3C) ); // Enable CTC interrupt
+  TIMSK3 |= (_BV(OCIE3A ) | _BV(OCIE3B) | _BV(OCIE3C) ); 
   interrupts(); // make sure global interrupts are on
 }
 
 inline void disableTimer3Interrupts() {
-  TIMSK3 &= (~_BV(OCIE3A ) & ~_BV(OCIE3B) & ~_BV(OCIE3C)); // disable CTC interrupt
+  TIMSK3 &= (~_BV(OCIE3A ) & ~_BV(OCIE3B) & ~_BV(OCIE3C)); 
 }
 
 
