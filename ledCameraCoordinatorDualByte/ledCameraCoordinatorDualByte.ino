@@ -76,17 +76,17 @@ inline void indicatorOn() {PORTD |= _BV(6);}
 inline void indicatorOff() {PORTD &= ~_BV(6);}
 inline boolean indicatorIsOn() {return (PORTD & _BV(6));}
 
-const int stimPin1 = PIN_C6; //note that output compare registers can't be used here because of mistaken connections (fix in future hardware revision)
-const int stimPin2 = PIN_C5; //note that output compare registers can't be used here because of mistaken connections (fix in future hardware revision)
+const int stimPin2 = PIN_C6; //note that output compare registers can't be used here because of mistaken connections (fix in future hardware revision)
+const int stimPin1 = PIN_C5; //note that output compare registers can't be used here because of mistaken connections (fix in future hardware revision)
 
-inline void stimulus1On() {PORTC |= _BV(6);}
-inline void stimulus1Off() {PORTC &= ~_BV(6);}  
+inline void stimulus2On() {PORTC |= _BV(6);}
+inline void stimulus2Off() {PORTC &= ~_BV(6);}  
+inline void setStimulus2(boolean on) {if (on) stimulus2On(); else stimulus2Off();}
+
+
+inline void stimulus1On() {PORTC |= _BV(5);}
+inline void stimulus1Off() {PORTC &= ~_BV(5);}  
 inline void setStimulus1(boolean on) {if (on) stimulus1On(); else stimulus1Off();}
-
-
-inline void stimulus2On() {PORTC |= _BV(5);}
-inline void stimulus2Off() {PORTC &= ~_BV(5);}  
-inline void setStimulus2(boolean on) {if (on) stimulus1On(); else stimulus1Off();}
 
 const int syncPin = PIN_B4;
 
@@ -356,7 +356,6 @@ boolean loadByteBuffers () {
   }
   currentByteIndex1 = readIndex1 = 0;
   currentByteIndex2 = readIndex2 = 0;
-  updatePwmVal();
   return error;
 }
 
@@ -675,7 +674,7 @@ boolean openFile2ForReading(const char *fname) {
   }
   output2enabled = sdfile2.peek() >= 0;
   if (verbose && output2enabled) {
-    Serial.print("OK: File "); Serial.print(filename1); Serial.print(" with "); Serial.print(sdfile1.size()); Serial.println (" open for reading output 1"); 
+    Serial.print("OK: File "); Serial.print(filename2); Serial.print(" with "); Serial.print(sdfile1.size()); Serial.println (" open for reading output 2"); 
   }
   return (!output2enabled);
 }
@@ -697,6 +696,8 @@ boolean openFileForWriting(const char *fname) {
     }
   }
   int fn = atoi(fname);
+  //Serial.print("fn = "); Serial.println(fn);
+  
   if (fn < 1 || fn > 2) {
     Serial.println("must specify file 1 or 2");
     return true;
@@ -705,27 +706,36 @@ boolean openFileForWriting(const char *fname) {
   while (!isspace(fname[0]) && fname[0] != '\0') {
     ++fname;
   }
+  //Serial.print("remaining command point1: ");Serial.println(fname);
   while (isspace(fname[0]) && fname[0] != '\0') {
     ++fname;
   }
+  //Serial.print("remaining command point1: ");Serial.println(fname);
+  
   char filename[MAXFILECHARS];
   
   strncpy(filename, fname, MAXFILECHARS);
   filename[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
-  
+ // Serial.print("filename: "); Serial.println(filename);
   String d = String(filename);
   int ind = d.lastIndexOf('/');
   if (ind > 0) {
     d = d.substring(0,ind);
     char *dd =  (char *) d.c_str();
-    Serial.println(dd);
+   // Serial.println(dd);
     if (!SD.exists(dd)) {
+     // Serial.print("creating directory: ");
+ //     Serial.println(dd);
       if (!SD.mkdir(dd)) {
+        Serial.println("error");
+        Serial.print("could not create directory: ");
+        Serial.println(dd);
         return false;
       }
     }
   }
   boolean err = true;
+ // Serial.println("hi");
   if (fn == 1) {
     err = false;
     if (sdfile1) {
@@ -756,6 +766,10 @@ boolean openFileForWriting(const char *fname) {
     strncpy(filename2, filename, MAXFILECHARS);
     filename2[MAXFILECHARS] = '\0'; //note size(filename) = MAXFILECHARS + 1
   } 
+  //Serial.println(filename);
+  //Serial.println(filename1);
+  //Serial.println(filename2);
+  
   if (!err && verbose) {
     Serial.print("OK: File "); Serial.print(fn); Serial.print(": ");Serial.print(filename);  Serial.println (" open for writing"); 
   }
@@ -879,9 +893,21 @@ boolean readBytesFromFileToSerial (const char *command) {
   unsigned long nbytes = strtoul (command, NULL, 0);
   boolean err = true;
   if (fn == 1) {
+    if (!sdfile1) {
+      if (openFile1ForReading(NULL)) {
+        Serial.println("could not open file 1 for reading");
+        return true;
+      }
+    }   
     err = readBytesFromFileToSerial (sdfile1, nbytes);
   }
   if (fn == 2) {
+    if (!sdfile2) {
+      if (openFile2ForReading(NULL)) {
+        Serial.println("could not open file 2 for reading");
+        return true;
+      }
+    }
     err = readBytesFromFileToSerial (sdfile2, nbytes);
   }
   if (verbose && !err) {
@@ -903,9 +929,6 @@ boolean readBytesFromFileToSerial (const char *command) {
 }
 boolean readBytesFromFileToSerial (File sdfile, unsigned long &nbytes) {
   /*unsigned long */
-  if (!sdfile) {
-    openFileForReading(NULL);
-  }
   
   if (!sdfile) {
     for (long j = 0 ; j < nbytes; ++j) {

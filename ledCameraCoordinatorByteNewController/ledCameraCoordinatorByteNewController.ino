@@ -27,7 +27,7 @@
  */
  
  //comment this line out for red stimulation
-#define BLUE 1 
+//#define BLUE 1 
 
 const int ssPin = PIN_B0;
 
