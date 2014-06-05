@@ -645,7 +645,7 @@ boolean openFile1ForReading(const char *fname) {
     return true;
   }
   output1enabled = sdfile1.peek() >= 0;
-  if (verbose && output1enabled) {
+  if (verbose && output1enabled && fname != NULL) {
     Serial.print("OK: File "); Serial.print(filename1); Serial.print(" with "); Serial.print(sdfile1.size()); Serial.println (" open for reading output 1"); 
   }
   return (!output1enabled);
@@ -673,7 +673,7 @@ boolean openFile2ForReading(const char *fname) {
     return true;
   }
   output2enabled = sdfile2.peek() >= 0;
-  if (verbose && output2enabled) {
+  if (verbose && output2enabled && fname != NULL) {
     Serial.print("OK: File "); Serial.print(filename2); Serial.print(" with "); Serial.print(sdfile1.size()); Serial.println (" open for reading output 2"); 
   }
   return (!output2enabled);
@@ -880,6 +880,9 @@ boolean setStimulus(const char *command) { //could update with some kind of chec
 }
 
 boolean readBytesFromFileToSerial (const char *command) {
+  boolean v = verbose;
+  verbose = false;
+  
   if (command != NULL) {
     while (isspace(command[0]) && command[0] != '\0') {
       ++command;
@@ -910,6 +913,8 @@ boolean readBytesFromFileToSerial (const char *command) {
     }
     err = readBytesFromFileToSerial (sdfile2, nbytes);
   }
+  
+  verbose = v;
   if (verbose && !err) {
     Serial.print("OK: ");
     Serial.print(nbytes); Serial.print(" bytes read from file "); 
