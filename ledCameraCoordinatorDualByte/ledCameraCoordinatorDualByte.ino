@@ -167,7 +167,7 @@ void setup() {
   digitalWrite(indicatorLedPin, HIGH);
     
   pinMode(notShdnLedPin, OUTPUT);
-  ledsDisable(); //modify for on-board led drivers
+  ledsEnable(); //modify for on-board led drivers
   
   //setup serial
   Serial.begin(9600);
