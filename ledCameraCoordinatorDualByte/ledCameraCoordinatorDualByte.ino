@@ -151,7 +151,9 @@ long int frameCount = 0;
 
 boolean timer3setup = false;
 
+boolean logarithmic = false;
 
+float logTable[256];
 
 void setup() {
   //first, turn off the clock prescaler, to get 16MHz operation
@@ -194,7 +196,7 @@ void setup() {
   //start SD library
   SD.begin(ssPin);
   
-  
+  createLogTable();
 
   setupTimer1();
   disableTimer3Interrupts();
@@ -240,7 +242,17 @@ ISR ( TIMER3_COMPC_vect ) {
   stimulus2Off();
 }
 
-
+void createLogTable() {
+  float maxx = log(255);
+  logTable[0] = 0;
+  for (int j = 1; j < 256; ++j) {
+    logTable[j] = exp(j*maxx/255)/255.0;
+  }
+  logTable[255] = 1.0; //avoid any problems with almost theres
+  
+}
+  
+  
 void cameraFlash() {
   
   if (!cameraFlashValue()) { //camera flashes low at start of cycle
@@ -311,9 +323,13 @@ void nextByte() {
 inline void setPwmVal(byte pwmb1, byte pwmb2) {
   pwmbyte1 = pwmb1;
   pwmbyte2 = pwmb2;
-  pwmval1 = (unsigned int) (pwmb1/255.0 * timer3countsPerByte);
-  pwmval2 = (unsigned int) (pwmb2/255.0 * timer3countsPerByte);
-  
+  if (logarithmic) {
+    pwmval1 = (unsigned int) (logTable[pwmb1] * timer3countsPerByte);
+    pwmval2 = (unsigned int) (logTable[pwmb2] * timer3countsPerByte);
+  } else {
+    pwmval1 = (unsigned int) (pwmb1/255.0 * timer3countsPerByte);
+    pwmval2 = (unsigned int) (pwmb2/255.0 * timer3countsPerByte);
+  }
 }
 void updatePwmVal() {
   setPwmVal (byteBuffer1[currentByteIndex1],byteBuffer2[currentByteIndex2]);
@@ -503,12 +519,29 @@ boolean executeSerialCommand(char *command) {
     case 'I':
       getInfo();
       break;
+    case 'G':
+      err = setLogarithmicState(command+1);
+      break;
+    case 'D':
+      printDiagnostics();
+      break;
+    
+      
     default:
       Serial.println("unrecognized command");
       err = true;
       break;
       }
   return err;
+}
+
+void printDiagnostics (void) {
+  Serial.print ("pwmval1 = ");
+  Serial.println (pwmval1);
+  Serial.print ("pwmval2 = ");
+  Serial.println (pwmval2);
+  Serial.print ("timer3 counts per byte = ");
+  Serial.println(timer3countsPerByte);
 }
 
 boolean setOutputState(const char *command) {
@@ -596,6 +629,22 @@ boolean setNumBytesPerFrameFromString (const char *str) {
   return false;
 }
 
+
+boolean setLogarithmicState (const char *str) {
+  int nb = atoi(str);
+  if (nb < 0 ) {
+    Serial.println("error: need a 0 or 1 to set state");
+    return true;
+  }
+  logarithmic = (nb != 0);
+  Serial.print("OK: output "); 
+  if (logarithmic) {
+    Serial.println("LOGARITHMIC");
+  } else {
+    Serial.println("LINEAR");
+  }
+  return false;
+}
 
 boolean openFileForReading(const char *command) {
   if (command == NULL) {
@@ -1033,6 +1082,12 @@ void reportReady() {
   } else {
     Serial.print(sdfile2.size()); Serial.println(" bytes");
   }  
+  
+  if (logarithmic) {
+    Serial.println("output is LOGARITHMIC");
+  } else {
+    Serial.println("output is LINEAR");
+  }
 }
 
 void endExperiment() {
