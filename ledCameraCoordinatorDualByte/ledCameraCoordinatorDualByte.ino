@@ -99,7 +99,9 @@ const boolean debug = false;
 volatile boolean verbose = true;
 
 volatile int countsSinceLastFrame = 17750; //expected rate of 71 ms
+volatile int countsSinceLastFrame_old = 17750;
 volatile boolean newFrame = false;
+volatile boolean lastflash = false;
 
 boolean output1enabled = false;
 boolean output2enabled = false;
@@ -154,6 +156,8 @@ boolean timer3setup = false;
 boolean logarithmic = false;
 
 float logTable[256];
+
+volatile long numflashes = 0;
 
 void setup() {
   //first, turn off the clock prescaler, to get 16MHz operation
@@ -252,10 +256,25 @@ void createLogTable() {
   
 }
   
-  
+
+boolean cameraFlashValueDebounced(int numdebounces) {
+  int flashval = 0;
+  for (int j = 0; j < numdebounces; ++j) {
+    flashval = flashval + cameraFlashValue();
+  }
+  return flashval > numdebounces / 2;
+}
+
 void cameraFlash() {
+  boolean flashval = cameraFlashValueDebounced(7);
+  if (flashval == lastflash) {
+    return;
+  }
+  lastflash = flashval;
   
-  if (!cameraFlashValue()) { //camera flashes low at start of cycle
+  
+  
+  if (!lastflash) { //camera flashes low at start of cycle
     irLightsOn();
     
     unsigned char sreg = SREG;
@@ -266,6 +285,13 @@ void cameraFlash() {
     
     indicatorOn();
     startNewFrame();
+    ++numflashes;
+    //DEBUG - REMOVE ONCE FIXED - DEBUG
+   // if ((countsSinceLastFrame - countsSinceLastFrame_old) > 100 || (countsSinceLastFrame - countsSinceLastFrame_old) < -100){
+ //     printDiagnostics();
+ //   }
+    //PROBLEM ABOVE IF NOT REMOVED
+    countsSinceLastFrame_old = countsSinceLastFrame;
   } else {
     irLightsOff();
     indicatorOff();  
@@ -536,6 +562,8 @@ boolean executeSerialCommand(char *command) {
 }
 
 void printDiagnostics (void) {
+  Serial.printf ("num flashes = ");
+  Serial.println(numflashes);
   Serial.print ("pwmval1 = ");
   Serial.println (pwmval1);
   Serial.print ("pwmval2 = ");
