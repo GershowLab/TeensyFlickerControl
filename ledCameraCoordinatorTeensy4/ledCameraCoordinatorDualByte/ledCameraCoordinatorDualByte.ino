@@ -76,6 +76,23 @@ const int stimPin2 = 10; //note that output compare registers can't be used here
 const int stimPin1 = 12; //note that output compare registers can't be used here because of mistaken connections (fix in future hardware revision)
 const int nBytesPerFrame = 1;
 
+volatile long numflashes = 0;
+//TPS92205x - make frequency > 20k so you can't hear it
+//https://e2e.ti.com/support/power-management-group/power-management/f/power-management-forum/1559650/faq-tps922051-how-to-reduce-acoustic-noise-of-mlccs-in-tps92205x-and-tps92365x-applications-with-pwm-dimming
+//12 bit <= 36621 Hz
+// 13 bit <= 18310 Hz
+//https://www.pjrc.com/teensy/td_pulse.html
+//TPS92055 is 11bit max at 20kHz (2,000:1 at 20-kHz PWM)
+//experimentally, minimum pulse width = 300 ns
+//13 kHz = 8 bits
+
+const float pwm_freq = 120;
+const int pwm_bit_res = 16;
+const int max_pwm_value = 65535;
+const int fullon = 255;
+const int min_pwm_reliable = 8;
+
+
 
 inline int cameraFlashValue() {
  return digitalRead(16);
@@ -88,7 +105,41 @@ inline void indicatorOn() {digitalWrite(indicatorLedPin, HIGH);}
 inline void indicatorOff() {digitalWrite(indicatorLedPin, LOW);}
 
 inline void setStimulus2(int value) {analogWrite(stimPin2, value);}
-inline void setStimulus1(int value) {analogWrite(stimPin1, value);}
+inline void setStimulus1(int value) {
+      analogWrite(stimPin1, value); 
+return;
+  static int lastvalue = 0;
+  // digitalWrite(stimPin1, LOW); 
+  // delayMicroseconds(10);
+  // digitalWrite(stimPin1, value > 0);
+  // delayMicroseconds(10); 
+  // digitalWrite(stimPin1,LOW);
+  // delayMicroseconds(10);
+  if (value == lastvalue) {
+    return;
+  }
+  lastvalue = value;
+  if (value == 0) {
+    digitalWrite(stimPin1, LOW);
+    return;
+  }
+  if (value < min_pwm_reliable){
+    analogWrite(stimPin1, min_pwm_reliable);
+    delayMicroseconds(1000000/pwm_freq);
+  }
+  if (value > max_pwm_value - min_pwm_reliable) {
+     analogWrite(stimPin1, max_pwm_value - min_pwm_reliable);
+    delayMicroseconds(1000000/pwm_freq);
+  }
+
+  if (value >= max_pwm_value){
+    digitalWrite(stimPin1, HIGH);
+  } else {
+    analogWrite(stimPin1, value); 
+  }
+  Serial.print("Stim1 = "); 
+  Serial.println(value);
+}
 
 
 //const int notShdnLedPin = PIN_E0;
@@ -150,18 +201,6 @@ long int frameCount = 0;
 boolean logarithmic = false;
 
 float logTable[256];
-
-volatile long numflashes = 0;
-//TPS92205x - make frequency > 20k so you can't hear it
-//https://e2e.ti.com/support/power-management-group/power-management/f/power-management-forum/1559650/faq-tps922051-how-to-reduce-acoustic-noise-of-mlccs-in-tps92205x-and-tps92365x-applications-with-pwm-dimming
-//12 bit <= 36621 Hz
-// 13 bit <= 18310 Hz
-//https://www.pjrc.com/teensy/td_pulse.html
-//TPS92055 is 11bit max at 20kHz (2,000:1 at 20-kHz PWM)
-
-const float pwm_freq = 20000;
-const int pwm_bit_res = 12;
-const int max_pwm_value = 4095;
 
 
 
@@ -839,7 +878,8 @@ boolean setStimulus(const char *command) { //could update with some kind of chec
     v2 = 0;
   }
   setPwmVal(v1, v2);
-  
+ setStimulus1(pwmval1);
+  setStimulus2(pwmval2);
   return false;
 }
 
@@ -1044,6 +1084,18 @@ void setup() {
   pinMode(stimPin2, OUTPUT);
   digitalWrite(stimPin2, LOW);
   
+  analogWriteFrequency(stimPin1,pwm_freq);
+  analogWriteFrequency(stimPin2,pwm_freq);
+  analogWriteResolution(pwm_bit_res);
+  for (int j = 0; j < 256; ++j){
+    setPwmVal(j,255-j);
+    setStimulus1(pwmval1);
+    setStimulus2(pwmval2);
+    delay(5);
+  }
+  
+
+
   
   //start SD library
   SD.begin(BUILTIN_SDCARD);
