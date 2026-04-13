@@ -85,6 +85,7 @@ volatile long numflashes = 0;
 //TPS92055 is 11bit max at 20kHz (2,000:1 at 20-kHz PWM)
 //experimentally, minimum pulse width = 300 ns
 //13 kHz = 8 bits
+//turns out that need a lower frequency (< 1 khZ) for reliable operation
 
 const float pwm_freq = 120;
 const int pwm_bit_res = 16;
@@ -215,27 +216,32 @@ void createLogTable() {
 }
   
 
-boolean cameraFlashValueDebounced(int numdebounces) {
-  int flashval = 0;
-  for (int j = 0; j < numdebounces; ++j) {
-    flashval = flashval + cameraFlashValue();
-  }
-  return flashval > numdebounces / 2;
-}
+/*
+* new debouncing logic - when flash pin changes, reset an elapsedMicros timer
+* every min_flash_sep / 2, check if a flash happened at least min_flash_sep ago
 
-void cameraFlash() {
-  boolean flashval = cameraFlashValueDebounced(7);
+*/
+IntervalTimer flash_timer;
+elapsedMicros last_flash_time = 0;
+bool did_i_flash = 0;
+const int min_flash_sep = 1000; //microseconds
+
+void checkFlash() {
+  if (last_flash_time < min_flash_sep) {
+      return;
+  }
+  if (!did_i_flash) {
+    return;
+  }
+  boolean flashval = cameraFlashValue();
   if (flashval == lastflash) {
     return;
   }
+  did_i_flash = 0;
   lastflash = flashval;
-  
-  
   
   if (!lastflash) { //camera flashes low at start of cycle
     irLightsOn();
-    
-    
     indicatorOn();
     startNewFrame();
     ++numflashes;
@@ -244,6 +250,11 @@ void cameraFlash() {
     indicatorOff();  
   }
   
+}
+
+void cameraFlash() {
+  last_flash_time = 0;
+  did_i_flash = 1;
 }
 
 void startNewFrame() {
@@ -1103,6 +1114,7 @@ void setup() {
   createLogTable();
 
   attachInterrupt(cameraFlashWindowPin, cameraFlash, CHANGE);
+  flash_timer.begin(checkFlash, min_flash_sep/2);
   
   digitalWrite(indicatorLedPin, LOW);
   
