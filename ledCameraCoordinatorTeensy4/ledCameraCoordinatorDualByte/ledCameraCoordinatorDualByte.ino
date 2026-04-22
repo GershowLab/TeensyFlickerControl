@@ -56,7 +56,8 @@
  " B time since experiment started in ms\n"
  " C position in file1 (note that experiment reads ahead)\n"
  " D position in file2 (note that experiment reads ahead)\n"
- " E number of bytes output to this point\n"};
+ " E number of bytes output to this point\n"
+ "P - (seP) set minimum flash separation in microseconds"};
  
 
 //values reflect new interface board
@@ -98,6 +99,9 @@ const int min_pwm_reliable = 8;
 inline int cameraFlashValue() {
  return digitalRead(16);
 }
+
+inline void matchIrToFlash() {digitalWrite(infraredLedControlPin, !cameraFlashValue());}
+inline void matchIndicatorToFlash() {digitalWrite(indicatorLedPin, !cameraFlashValue());}
 
 inline void irLightsOn() {digitalWrite(infraredLedControlPin, HIGH);}
 inline void irLightsOff() {digitalWrite(infraredLedControlPin, LOW);}
@@ -216,45 +220,49 @@ void createLogTable() {
 }
   
 
-/*
-* new debouncing logic - when flash pin changes, reset an elapsedMicros timer
-* every min_flash_sep / 2, check if a flash happened at least min_flash_sep ago
-
-*/
-IntervalTimer flash_timer;
+/* new debouncing logic, enforce minimum time between level changes
+ * only trigger on negative transitions
+ */
 elapsedMicros last_flash_time = 0;
-bool did_i_flash = 0;
-const int min_flash_sep = 1000; //microseconds
+unsigned long min_flash_sep = 10000; //microseconds
 
-void checkFlash() {
-  if (last_flash_time < min_flash_sep) {
-      return;
-  }
-  if (!did_i_flash) {
-    return;
-  }
-  boolean flashval = cameraFlashValue();
-  if (flashval == lastflash) {
-    return;
-  }
-  did_i_flash = 0;
-  lastflash = flashval;
+// void checkFlash() {
+//   //was high and have not gone down for at least 
+//   if (lastflash && last_flash_down < min_flash_sep) {
+//     return
+//   }
+//   if ()
+//   if (last_flash_time < min_flash_sep) {
+//       return;
+//   }
+//   if (!did_i_flash) {
+//     return;
+//   }
+//   boolean flashval = cameraFlashValue();
+//   if (flashval == lastflash) {
+//     return;
+//   }
+//   did_i_flash = 0;
+//   lastflash = flashval;
   
-  if (!lastflash) { //camera flashes low at start of cycle
-    irLightsOn();
-    indicatorOn();
-    startNewFrame();
-    ++numflashes;
-  } else {
-    irLightsOff();
-    indicatorOff();  
-  }
+//   if (!lastflash) { //camera flashes low at start of cycle
+//     irLightsOn();
+
+//   } else {
+//     irLightsOff();
+//     indicatorOff();  
+//   }
   
-}
+// }
 
 void cameraFlash() {
+  if (last_flash_time < min_flash_sep) {
+    return;
+  }
   last_flash_time = 0;
-  did_i_flash = 1;
+  indicatorOn();
+  ++numflashes;
+  startNewFrame();
 }
 
 void startNewFrame() {
@@ -377,6 +385,8 @@ void loop() {
   //wdt_reset(); //pet the dog
   serialPoll();
   pollForNewByte();  
+  matchIrToFlash();
+  matchIndicatorToFlash();
 }
 
 
@@ -490,6 +500,11 @@ boolean executeSerialCommand(char *command) {
     case 'D':
       printDiagnostics();
       break;
+    case 'P':
+      err = setFlashSeparationFromString(command+1); 
+      if (verbose && !err) {
+         Serial.println();Serial.print("OK: "); Serial.print (min_flash_sep); Serial.println(" microseconds between flashes.");
+      }
     
       
     default:
@@ -591,6 +606,16 @@ boolean setNumBytesPerFrameFromString (const char *str) {
     return true;
   }
   setNumBytesPerFrame (nb);
+  return false;
+}
+
+
+boolean setFlashSeparationFromString (const char *str) {
+  int nb = atoi(str);
+  if (nb <= 0 || nb > 1E6) {
+    return true;
+  }
+  min_flash_sep = nb;
   return false;
 }
 
@@ -1113,8 +1138,8 @@ void setup() {
   
   createLogTable();
 
-  attachInterrupt(cameraFlashWindowPin, cameraFlash, CHANGE);
-  flash_timer.begin(checkFlash, min_flash_sep/2);
+  attachInterrupt(digitalPinToInterrupt(cameraFlashWindowPin), cameraFlash, FALLING);
+  //flash_timer.begin(checkFlash, min_flash_sep/2);
   
   digitalWrite(indicatorLedPin, LOW);
   
